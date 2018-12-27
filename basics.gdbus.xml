@@ -1,10 +1,14 @@
 <!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
          "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
 <node>
-  <interface name="io.mangoh.HelloWorld">
-    <method name="HelloWorld">
-      <arg name="greeting" type="s" direction="in"/>
+  <interface name="io.mangoh.Testing">
+    <method name="Greet">
+      <arg name="recipient" type="s" direction="in"/>
       <arg name="num_times_called" type="q" direction="out"/>
     </method>
+    <signal name="TimerExpired">
+      <arg name="remaining" type="q"/>
+    </signal>
+    <property name="Greeting" type="s" access="readwrite"/>
   </interface>
 </node>

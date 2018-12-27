@@ -1,13 +1,20 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <gio/gio.h>
+#include <assert.h>
 #include "basics_gen.h"
 #include "config.h"
 
+struct TestingState {
+    IoMangohTesting *interface;
+    guint16 num_times_called;
+    unsigned int timer_count;
+};
+
 static struct {
     GMainLoop *loop;
-    guint16 num_times_called;
 } _;
+
 
 void terminate(gpointer user_data)
 {
@@ -15,23 +22,25 @@ void terminate(gpointer user_data)
     g_main_loop_quit(_.loop);
 }
 
-gboolean timeout_printer(gpointer user_data)
+gboolean timeout_handler(gpointer user_data)
 {
-    unsigned int *timer_count = user_data;
-    (*timer_count)--;
-    printf("timeout with remaining timeouts=%d\n", *timer_count);
-    return (*timer_count) != 0;
+    struct TestingState *ts = user_data;
+    ts->timer_count--;
+    printf("timeout with remaining timeouts=%d\n", ts->timer_count);
+    io_mangoh_testing_emit_timer_expired(ts->interface, ts->timer_count);
+    return ts->timer_count != 0;
 }
 
-static gboolean on_handle_hello_world(
-    IoMangohHelloWorld *interface,
+static gboolean on_handle_greet(
+    IoMangohTesting *interface,
     GDBusMethodInvocation *invocation,
-    const gchar *greeting,
+    const gchar *recipient,
     gpointer user_data)
 {
-    printf("Hello %s\n", greeting);
-    _.num_times_called++;
-    io_mangoh_hello_world_complete_hello_world(interface, invocation, _.num_times_called);
+    struct TestingState *ts = user_data;
+    printf("%s %s\n", io_mangoh_testing_get_greeting(ts->interface), recipient);
+    ts->num_times_called++;
+    io_mangoh_testing_complete_greet(interface, invocation, ts->num_times_called);
 
     return TRUE;
 }
@@ -41,12 +50,14 @@ static void on_bus_acquired(GDBusConnection *conn, const gchar *name, gpointer u
 {
     printf("Acquired bus \"%s\"\n", name);
 
-    IoMangohHelloWorld *interface = io_mangoh_hello_world_skeleton_new();
-    g_signal_connect(interface, "handle-hello-world", G_CALLBACK(on_handle_hello_world), NULL);
+    struct TestingState *ts = user_data;
+    ts->interface = io_mangoh_testing_skeleton_new();
+    io_mangoh_testing_set_greeting(ts->interface, "Hello");
+    g_signal_connect(ts->interface, "handle-greet", G_CALLBACK(on_handle_greet), ts);
 
     GError *error = NULL;
     if (!g_dbus_interface_skeleton_export(
-            G_DBUS_INTERFACE_SKELETON(interface), conn, "/io/mangoh/GDBUS", &error)) {
+            G_DBUS_INTERFACE_SKELETON(ts->interface), conn, "/io/mangoh/GDBUS", &error)) {
         printf("Couldn't export skeleton\n");
         exit(1);
     }
@@ -74,15 +85,8 @@ int main(int argc, char **argv)
         Basics_VERSION_MINOR,
         Basics_VERSION_SUB);
 
-    const guint interval_ms = 5 * 1000;
-    unsigned int timer_count = 3;
-    const guint timeout_event_id = g_timeout_add_full(
-        G_PRIORITY_DEFAULT, interval_ms, timeout_printer, &timer_count, terminate);
-    printf(
-        "Registered timer with id=%d, timeout=%d, count=%d\n",
-        timeout_event_id,
-        interval_ms,
-        timer_count);
+    struct TestingState *ts = calloc(sizeof(*ts), 1);
+    assert(ts);
 
     const guint name_ref = g_bus_own_name(
         G_BUS_TYPE_SESSION,
@@ -91,8 +95,18 @@ int main(int argc, char **argv)
         on_bus_acquired,
         on_name_acquired,
         on_name_lost,
-        NULL,
+        ts,
         NULL);
+
+    const guint interval_ms = 5 * 1000;
+    ts->timer_count = 3;
+    const guint timeout_event_id = g_timeout_add_full(
+        G_PRIORITY_DEFAULT, interval_ms, timeout_handler, ts, terminate);
+    printf(
+        "Registered timer with id=%d, timeout=%d, count=%d\n",
+        timeout_event_id,
+        interval_ms,
+        ts->timer_count);
 
     // TODO: by passing NULL as the first parameter, we are setting the GMainContext* as the
     // "default context". What is the purpose of this context parameter?
