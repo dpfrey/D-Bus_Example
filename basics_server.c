@@ -6,21 +6,19 @@
 #include "config.h"
 
 struct TestingState {
+    GMainLoop *loop;
     GDBusObjectManagerServer *object_manager;
     Greetable *greetable_intf;
     guint16 num_times_called;
     unsigned int timer_count;
 };
 
-static struct {
-    GMainLoop *loop;
-} _;
-
 
 void terminate(gpointer user_data)
 {
+    struct TestingState *ts = user_data;
     puts("Terminating the main loop");
-    g_main_loop_quit(_.loop);
+    g_main_loop_quit(ts->loop);
 }
 
 gboolean timeout_handler(gpointer user_data)
@@ -123,14 +121,16 @@ int main(int argc, char **argv)
 
     // TODO: by passing NULL as the first parameter, we are setting the GMainContext* as the
     // "default context". What is the purpose of this context parameter?
-    _.loop = g_main_loop_new(NULL, FALSE);
+    ts->loop = g_main_loop_new(NULL, FALSE);
     puts("Running the main loop");
-    g_main_loop_run(_.loop);
+    g_main_loop_run(ts->loop);
     puts("The main loop has completed");
 
     g_bus_unown_name(name_ref);
 
-    g_main_loop_unref(_.loop);
+    g_main_loop_unref(ts->loop);
+
+    free(ts);
 
     return 0;
 }
