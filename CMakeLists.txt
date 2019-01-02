@@ -26,7 +26,7 @@ if (NOT GDBUSCODEGEN)
   message(SEND_ERROR "Couldn't find gdbus-codegen")
 endif (NOT GDBUSCODEGEN)
 add_custom_command(OUTPUT basics_gen.c basics_gen.h
-  COMMAND ${GDBUSCODEGEN} --generate-c-code=basics_gen ${PROJECT_SOURCE_DIR}/basics.gdbus.xml
+  COMMAND ${GDBUSCODEGEN} --generate-c-code=basics_gen --interface-prefix io.mangoh.Testing. --c-generate-object-manager ${PROJECT_SOURCE_DIR}/basics.gdbus.xml
   DEPENDS basics.gdbus.xml
   )
 

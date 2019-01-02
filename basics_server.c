@@ -6,7 +6,8 @@
 #include "config.h"
 
 struct TestingState {
-    IoMangohTesting *interface;
+    GDBusObjectManagerServer *object_manager;
+    Greetable *greetable_intf;
     guint16 num_times_called;
     unsigned int timer_count;
 };
@@ -27,20 +28,20 @@ gboolean timeout_handler(gpointer user_data)
     struct TestingState *ts = user_data;
     ts->timer_count--;
     printf("timeout with remaining timeouts=%d\n", ts->timer_count);
-    io_mangoh_testing_emit_timer_expired(ts->interface, ts->timer_count);
+    greetable_emit_timer_expired(ts->greetable_intf, ts->timer_count);
     return ts->timer_count != 0;
 }
 
 static gboolean on_handle_greet(
-    IoMangohTesting *interface,
+    Greetable *interface,
     GDBusMethodInvocation *invocation,
     const gchar *recipient,
     gpointer user_data)
 {
     struct TestingState *ts = user_data;
-    printf("%s %s\n", io_mangoh_testing_get_greeting(ts->interface), recipient);
+    printf("%s %s\n", greetable_get_greeting(interface), recipient);
     ts->num_times_called++;
-    io_mangoh_testing_complete_greet(interface, invocation, ts->num_times_called);
+    greetable_complete_greet(interface, invocation, ts->num_times_called);
 
     return TRUE;
 }
@@ -51,16 +52,28 @@ static void on_bus_acquired(GDBusConnection *conn, const gchar *name, gpointer u
     printf("Acquired bus \"%s\"\n", name);
 
     struct TestingState *ts = user_data;
-    ts->interface = io_mangoh_testing_skeleton_new();
-    io_mangoh_testing_set_greeting(ts->interface, "Hello");
-    g_signal_connect(ts->interface, "handle-greet", G_CALLBACK(on_handle_greet), ts);
 
-    GError *error = NULL;
-    if (!g_dbus_interface_skeleton_export(
-            G_DBUS_INTERFACE_SKELETON(ts->interface), conn, "/io/mangoh/GDBUS", &error)) {
-        printf("Couldn't export skeleton\n");
-        exit(1);
-    }
+    ts->object_manager = g_dbus_object_manager_server_new("/Testing");
+
+    ObjectSkeleton *object_skeleton;
+    Greetable *greetable;
+    object_skeleton = object_skeleton_new("/Testing/Greeter");
+    greetable = greetable_skeleton_new();
+    ts->greetable_intf = greetable;
+    object_skeleton_set_greetable(object_skeleton, greetable);
+    // Release the reference since it's owned by the object now
+    g_object_unref(greetable);
+
+    greetable_set_greeting(greetable, "Hello");
+    g_signal_connect(greetable, "handle-greet", G_CALLBACK(on_handle_greet), ts);
+
+    // Export the object.  The object manager takes its own reference of the object, so we unref.
+    g_dbus_object_manager_server_export(ts->object_manager, G_DBUS_OBJECT_SKELETON(object_skeleton));
+    g_object_unref(object_skeleton);
+
+
+    // Export all objects
+    g_dbus_object_manager_server_set_connection(ts->object_manager, conn);
 }
 
 static void on_name_acquired(GDBusConnection *conn, const gchar *name, gpointer user_data)
@@ -114,6 +127,10 @@ int main(int argc, char **argv)
     puts("Running the main loop");
     g_main_loop_run(_.loop);
     puts("The main loop has completed");
+
+    g_bus_unown_name(name_ref);
+
+    g_main_loop_unref(_.loop);
 
     return 0;
 }

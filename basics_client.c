@@ -10,7 +10,7 @@ static struct {
 
 
 static void on_handle_timer_expired(
-    IoMangohTesting *object,
+    Greetable *object,
     guint16 remaining,
     gpointer user_data)
 {
@@ -25,19 +25,19 @@ int main(int argc, char **argv)
         Basics_VERSION_MINOR,
         Basics_VERSION_SUB);
     GError *error = NULL;
-    IoMangohTesting *proxy = io_mangoh_testing_proxy_new_for_bus_sync(
+    Greetable *proxy = greetable_proxy_new_for_bus_sync(
         G_BUS_TYPE_SESSION,
         G_DBUS_PROXY_FLAGS_NONE,
         "io.mangoh",
-        "/io/mangoh/GDBUS",
+        "/Testing/Greeter",
         NULL,
         &error);
     g_signal_connect(proxy, "timer-expired", G_CALLBACK(on_handle_timer_expired), NULL);
-    gchar *old_greeting = io_mangoh_testing_dup_greeting(proxy);
+    gchar *old_greeting = greetable_dup_greeting(proxy);
     printf("The old greeting was: %s\n", old_greeting);
-    io_mangoh_testing_set_greeting(proxy, "Salutations");
+    greetable_set_greeting(proxy, "Salutations");
     guint16 num_times_called;
-    if (!io_mangoh_testing_call_greet_sync(
+    if (!greetable_call_greet_sync(
             proxy,
             "Dave",
             &num_times_called,
@@ -49,7 +49,7 @@ int main(int argc, char **argv)
     printf("The number of times the function has been called is %d\n", num_times_called);
 
     // Restore the old greeting
-    io_mangoh_testing_set_greeting(proxy, old_greeting);
+    greetable_set_greeting(proxy, old_greeting);
     g_free(old_greeting);
 
     _.loop = g_main_loop_new(NULL, FALSE);
